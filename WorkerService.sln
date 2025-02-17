@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35728.132
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorkerService", "WorkerService\WorkerService.csproj", "{609C4E67-8910-49A5-8007-CD1713E3CED0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorkerService2", "WorkerService2\WorkerService2.csproj", "{FAC2135B-30BB-4324-AD86-DAFBB2662258}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorkerService3", "WorkerService3\WorkerService3.csproj", "{63F92E18-58CC-437C-8803-5B3409B41D1D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{609C4E67-8910-49A5-8007-CD1713E3CED0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{609C4E67-8910-49A5-8007-CD1713E3CED0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{609C4E67-8910-49A5-8007-CD1713E3CED0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{609C4E67-8910-49A5-8007-CD1713E3CED0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FAC2135B-30BB-4324-AD86-DAFBB2662258}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FAC2135B-30BB-4324-AD86-DAFBB2662258}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FAC2135B-30BB-4324-AD86-DAFBB2662258}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FAC2135B-30BB-4324-AD86-DAFBB2662258}.Release|Any CPU.Build.0 = Release|Any CPU
+		{63F92E18-58CC-437C-8803-5B3409B41D1D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{63F92E18-58CC-437C-8803-5B3409B41D1D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{63F92E18-58CC-437C-8803-5B3409B41D1D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{63F92E18-58CC-437C-8803-5B3409B41D1D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
