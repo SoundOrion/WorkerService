@@ -475,3 +475,151 @@ PowerShell を **タスクスケジューラで定期実行すれば、イベン
 🎯 **できない場合は「PowerShell で定期的に監視」**  
 
 ✅ **これで、アプリがクラッシュしても自動で復旧できる！** 🎉
+
+
+
+
+### **OS 側でアプリのクラッシュを検知し、プッシュ再起動する方法**
+Windows **OS 側からアプリのクラッシュを検知して再起動する方法** を解説します。  
+以下の 2 つの方法があり、どちらも **OS 側でプッシュしてアプリを再起動** できます。
+
+---
+
+## **1. Windows タスクスケジューラを使う（イベントログ監視 + 自動再起動）**
+Windows **イベントログ（Event Viewer）に記録されたクラッシュログをトリガーに、アプリを自動再起動する方法** です。
+
+✅ **OS 側がプッシュでアプリのクラッシュを検知し、即時再起動が可能**  
+✅ **アプリの異常終了を検出し、OS がリカバリーを管理**
+
+---
+
+### **📌 手順**
+1. **タスクスケジューラを開く**
+   - `Win + R` を押して **`taskschd.msc`** と入力 → `Enter`
+   - 左側メニューの `タスク スケジューラ ライブラリ` を選択
+   - `タスクの作成` をクリック
+
+2. **「全般」タブで設定**
+   - 名前: **`AutoRestart MyApp`**
+   - `最上位の特権で実行する`（管理者権限で実行）
+
+3. **「トリガー」タブ**
+   - `新規` をクリックし、以下の設定を追加:
+     - `タスクの開始` → **`ログにイベントが記録されたとき`**
+     - `ログ:` **`Application`**
+     - `ソース:` **`Application Error`**
+     - `イベント ID:` **`1000`**（アプリケーションエラー）
+
+4. **「操作」タブ**
+   - `新規` → `プログラムの開始`
+   - `プログラム/スクリプト` → **`C:\Program Files\MyApp\MyApp.exe`**
+
+5. **「条件」タブ**
+   - `コンピューターが AC 電源で動作している場合のみタスクを開始する` のチェックを外す（バッテリーでも実行）
+
+6. **「設定」タブ**
+   - `タスクがすでに実行中の場合、新しいインスタンスを開始しない` に設定
+   - `タスクが失敗した場合、再起動を試みる` → **`1 分後に再起動する（再試行 3 回）`**
+
+---
+
+### **✅ 完了！**
+Windows OS が **クラッシュを検知すると、即座にアプリを再起動** します。
+
+---
+
+## **2. Windows サービスとして登録（最も安全な方法）**
+常駐アプリを **Windows サービスとして登録すると、OS による自動再起動が可能** になります。
+
+### **📌 メリット**
+✅ OS による **プロセス管理 & 自動再起動**  
+✅ **サービスの管理が簡単**（`sc start/stop MyAppService`）  
+✅ **異常終了後、即座に自動復旧** できる  
+
+---
+
+### **📌 Windows サービス化の方法**
+1. **C# アプリを Windows サービス用に変更**
+```csharp
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+public class MyService : BackgroundService
+{
+    private readonly ILogger<MyService> _logger;
+
+    public MyService(ILogger<MyService> logger)
+    {
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        _logger.LogInformation("Service is running...");
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("Application is alive...");
+            await Task.Delay(10000, stoppingToken); // 10秒ごとに動作
+        }
+    }
+}
+```
+
+2. **Windows サービスとして登録**
+   - `Program.cs`
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+class Program
+{
+    static async Task Main(string[] args)
+    {
+        var host = Host.CreateDefaultBuilder(args)
+            .UseWindowsService() // Windows サービスとして実行
+            .ConfigureServices(services =>
+            {
+                services.AddHostedService<MyService>();
+            })
+            .Build();
+
+        await host.RunAsync();
+    }
+}
+```
+
+3. **サービスをインストール**
+   - `sc create MyAppService binPath= "C:\path\to\MyApp.exe" start= auto`
+   - `sc start MyAppService`
+
+4. **サービスがクラッシュしても自動再起動**
+   ```powershell
+   sc failure MyAppService reset= 86400 actions= restart/60000
+   ```
+   - **異常終了後 60 秒後に自動再起動**
+   - **リセットは 1 日（86400 秒）後にリセット**
+
+---
+
+### **✅ 完了！**
+Windows サービスとして登録することで、  
+**OS が自動的にプロセスを監視し、異常終了したら即座に再起動** できます。
+
+---
+
+## **3. どの方法を選ぶべきか？**
+| 方法 | メリット | デメリット |
+|------|---------|----------|
+| **タスクスケジューラ + イベントログ監視** | ✅ 簡単に実装 ✅ OS がクラッシュを検知して即時再起動 | ❌ Windows タスクスケジューラの設定が必要 |
+| **Windows サービス化** | ✅ OS が完全に管理 ✅ 自動再起動 ✅ Windows の公式な手法 | ❌ GUI アプリには向かない |
+
+---
+
+## **4. まとめ**
+✅ **「Windows タスクスケジューラでイベントログ監視」が簡単 & 確実！**  
+✅ **「Windows サービス化」すると、OS による完全なプロセス管理が可能！**  
+
+🚀 **どちらの方法も、OS 側からプッシュでアプリの異常終了を検知し、即時再起動が可能！** 🎉
