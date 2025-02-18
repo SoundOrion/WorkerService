@@ -1,16 +1,16 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 using System;
 using System.Data.SqlClient;
 using System.Threading;
 using System.Threading.Tasks;
-using Garnet.client;
 
 public class WorkerService : BackgroundService
 {
     private readonly ILogger<WorkerService> _logger;
     private readonly string _connectionString;
-    private readonly GarnetClient _garnetClient;
+    private readonly IDatabase _redisDatabase;
     private bool _isRunning = false;
 
     public WorkerService(ILogger<WorkerService> logger, IConfiguration configuration)
@@ -18,8 +18,9 @@ public class WorkerService : BackgroundService
         _logger = logger;
         _connectionString = configuration.GetConnectionString("DefaultConnection");
 
-        // Garnet クライアントを初期化（デフォルトの localhost:3278）
-        _garnetClient = new GarnetClient("127.0.0.1", 3278);
+        // StackExchange.Redis を使用して Garnet に接続
+        var redis = ConnectionMultiplexer.Connect("127.0.0.1:3278");
+        _redisDatabase = redis.GetDatabase();
 
         // 初回の状態を Garnet キャッシュにセット
         InitializeWorkerStatus();
@@ -28,7 +29,7 @@ public class WorkerService : BackgroundService
     private void InitializeWorkerStatus()
     {
         bool initialStatus = GetWorkerStatus();
-        _garnetClient.StringSet("WorkerStatus", initialStatus ? "1" : "0");
+        _redisDatabase.StringSet("WorkerStatus", initialStatus ? "1" : "0");
         _isRunning = initialStatus;
     }
 
@@ -38,7 +39,7 @@ public class WorkerService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            _isRunning = GetWorkerStatus(); // 最新の状態を取得し、直接 _isRunning に代入
+            _isRunning = GetWorkerStatus();
 
             if (_isRunning)
             {
@@ -57,10 +58,10 @@ public class WorkerService : BackgroundService
 
     private bool GetWorkerStatus()
     {
-        // Garnet からキャッシュを取得
-        string? cachedStatus = _garnetClient.Get("WorkerStatus");
+        // Garnet（Redis）からキャッシュを取得
+        string cachedStatus = _redisDatabase.StringGet("WorkerStatus");
 
-        if (cachedStatus != null)
+        if (!string.IsNullOrEmpty(cachedStatus))
         {
             return cachedStatus == "1";
         }
@@ -69,7 +70,7 @@ public class WorkerService : BackgroundService
         bool dbStatus = GetWorkerStatusFromDatabase();
 
         // Garnet にキャッシュを保存（60秒有効）
-        _garnetClient.StringSet("WorkerStatus", dbStatus ? "1" : "0", 60);
+        _redisDatabase.StringSet("WorkerStatus", dbStatus ? "1" : "0", TimeSpan.FromSeconds(60));
 
         return dbStatus;
     }

@@ -1,37 +1,36 @@
 using Microsoft.AspNetCore.Mvc;
-using Garnet.client;
+using StackExchange.Redis;
+using System.Data.SqlClient;
 
 [Route("api/worker")]
 [ApiController]
 public class WorkerController : ControllerBase
 {
     private readonly string _connectionString;
-    private readonly GarnetClient _garnetClient;
+    private readonly IDatabase _redisDatabase;
 
     public WorkerController(IConfiguration configuration)
     {
         _connectionString = configuration.GetConnectionString("DefaultConnection");
-        _garnetClient = new GarnetClient("127.0.0.1", 3278);
+
+        var redis = ConnectionMultiplexer.Connect("127.0.0.1:3278");
+        _redisDatabase = redis.GetDatabase();
     }
 
     [HttpGet("status")]
     public IActionResult GetWorkerStatus()
     {
-        // Garnet からキャッシュを取得
-        string? cachedStatus = _garnetClient.Get("WorkerStatus");
+        string cachedStatus = _redisDatabase.StringGet("WorkerStatus");
 
-        if (cachedStatus != null)
+        if (!string.IsNullOrEmpty(cachedStatus))
         {
-            return Ok(new { WorkerEnabled = cachedStatus == "1" });
+            return Ok(cachedStatus == "1");
         }
 
-        // キャッシュがなければ DB から取得
         bool dbStatus = GetWorkerStatusFromDatabase();
+        _redisDatabase.StringSet("WorkerStatus", dbStatus ? "1" : "0", TimeSpan.FromSeconds(60));
 
-        // Garnet にキャッシュを保存（60秒有効）
-        _garnetClient.Set("WorkerStatus", dbStatus ? "1" : "0", 60);
-
-        return Ok(new { WorkerEnabled = dbStatus });
+        return Ok(dbStatus);
     }
 
     [HttpPost("update")]
@@ -47,10 +46,10 @@ public class WorkerController : ControllerBase
             }
         }
 
-        // Garnetキャッシュを更新
-        _garnetClient.StringSet("WorkerStatus", enableWorker ? "1" : "0", 60);
+        // Garnet キャッシュを更新
+        _redisDatabase.StringSet("WorkerStatus", enableWorker ? "1" : "0", TimeSpan.FromSeconds(60));
 
-        return Ok("WorkerSettings updated.");
+        return Ok();
     }
 
     private bool GetWorkerStatusFromDatabase()

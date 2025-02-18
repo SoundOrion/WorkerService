@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using WorkerService3;
 
 var builder = WebApplication.CreateBuilder(args);
 
-//// SQL Server の接続情報を設定
-//var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+// Garnet を WebAPI サーバー内でセルフホスト
+builder.Services.AddHostedService<GarnetHostService>();
 
 // WorkerService を登録
 builder.Services.AddHostedService<WorkerService>();
