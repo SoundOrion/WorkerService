@@ -381,3 +381,97 @@ class Program
 ✅ メモリ & CPU 監視	メモリリークやCPU過負荷を検出	System.Diagnostics を使用
 ✅ 自動リスタート	アプリのクラッシュ対策	Windows タスクスケジューラ or PowerShell
 ✅ 動的設定更新	設定変更を反映しやすくする	IOptions<T> を使う
+
+
+
+## **イベントログを監視してアプリのクラッシュを検知し、自動再起動**
+Windows は、アプリケーションが **クラッシュすると `Event Viewer（イベントビューアー）` にログを記録** します。  
+このログを監視することで、アプリがクラッシュしたことを **正確に検知** し、**自動で再起動** できます。
+
+---
+
+## **1. イベントログの確認方法**
+まず、**アプリがクラッシュした際のイベント ID を特定** します。
+
+### **📌 イベントビューアーで確認**
+1. `Win + R` を押して `eventvwr.msc` を入力し、Enter
+2. 左ペインで **「Windows ログ」 → 「アプリケーション」** を開く
+3. `ソース` 列で **`Application Error`** を探す
+4. `イベント ID` を確認（通常 `1000`）
+
+---
+
+## **2. PowerShell を使ってイベントログを監視し、クラッシュ時に再起動**
+Windows の **`Get-WinEvent`** コマンドで `イベント ID: 1000` を監視し、**アプリがクラッシュしたら再起動** する。
+
+### **📌 `monitor-eventlog.ps1`（PowerShell スクリプト）**
+```powershell
+$AppName = "MyApp.exe"
+$AppPath = "C:\Program Files\MyApp\MyApp.exe"
+
+$EventLogFilter = @{
+    LogName   = 'Application'
+    Id        = 1000 # アプリケーションエラー（クラッシュ）
+    Newest    = 1
+}
+
+while ($true) {
+    $Event = Get-WinEvent -FilterHashtable $EventLogFilter -ErrorAction SilentlyContinue
+
+    if ($Event -ne $null -and $Event.Message -match $AppName) {
+        Write-Host "[$(Get-Date)] $AppName クラッシュ検出！再起動中..."
+        Start-Process -FilePath $AppPath
+    }
+
+    Start-Sleep -Seconds 10
+}
+```
+
+### **📌 実行方法**
+1. `monitor-eventlog.ps1` を適当なフォルダに保存（例: `C:\scripts\monitor-eventlog.ps1`）
+2. **PowerShell スクリプトの実行を許可**
+   ```powershell
+   Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+   ```
+3. **タスクスケジューラで 1 分ごとに実行**
+   - `Program/script` に `powershell`
+   - `Arguments` に `-File "C:\scripts\monitor-eventlog.ps1"`
+
+---
+
+## **3. イベントログ監視をタスクスケジューラに設定（自動化）**
+PowerShell を **タスクスケジューラで定期実行すれば、イベントログを監視し続けることができる**。
+
+### **📌 設定手順**
+1. `Win + R` → `taskschd.msc` でタスクスケジューラを開く
+2. `タスクの作成` をクリック
+3. **「全般」タブ**
+   - 名前: `Monitor MyApp Crash`
+   - `最上位の特権で実行する` にチェックを入れる
+4. **「トリガー」タブ**
+   - `新規` → `タスクの開始: ログにイベントが記録されたとき`
+   - `ログ: Application`
+   - `ソース: Application Error`
+   - `イベント ID: 1000`
+5. **「操作」タブ**
+   - `新規` → `プログラムの開始`
+   - `プログラム/スクリプト` → `powershell`
+   - `引数の追加` → `-File "C:\scripts\monitor-eventlog.ps1"`
+
+### **✅ 完了！**
+これで、**アプリがクラッシュすると自動的にスクリプトが実行され、アプリが再起動する！** 🚀
+
+---
+
+## **4. どの方法を選ぶべきか？**
+| 方法 | メリット | デメリット |
+|------|---------|----------|
+| **タスクスケジューラで定期実行** | ✅ シンプルで確実 | ❌ クラッシュ直後に即時再起動できない |
+| **PowerShell でイベントログを監視** | ✅ クラッシュ直後に即時再起動 | ❌ PowerShell がバックグラウンドで実行される |
+| **Windows サービス化** | ✅ OS による自動再起動 | ❌ サービス登録が必要 |
+
+### **💡 推奨方法**
+🚀 **「タスクスケジューラでイベントログ監視」が最も安全で確実！**  
+🎯 **できない場合は「PowerShell で定期的に監視」**  
+
+✅ **これで、アプリがクラッシュしても自動で復旧できる！** 🎉
