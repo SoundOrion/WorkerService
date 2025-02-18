@@ -716,3 +716,148 @@ while ($true) {
 ✅ **PowerShell スクリプト or タスクスケジューラで OS 側から自動再起動を実装できる！**  
 
 🚀 **これで、クラッシュを正確に検知し、OS 側からプッシュでアプリを復旧できる！** 🎉
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### **タスクスケジューラで OS 側からアプリのクラッシュを監視 & 再起動し、スクリプトで通知機能を追加**
+✅ **タスクスケジューラでアプリのクラッシュを監視して、スクリプトを実行**  
+✅ **スクリプトでアプリを起動しつつ、通知（メール, Slack, Discord, ログ）を送る**  
+
+---
+
+## **1. 目標**
+1. **Windows タスクスケジューラでクラッシュを検知（イベント ID 1000, 1001, 1002）**
+2. **タスクスケジューラは `restart-app.ps1`（PowerShell）を実行**
+3. **スクリプトが通知を送りつつ `MyApp.exe` を起動**
+
+---
+
+## **2. PowerShell スクリプトで通知 + アプリ再起動**
+### **📌 `restart-app.ps1`（アプリ再起動 & 通知送信）**
+```powershell
+$AppName = "MyApp.exe"
+$AppPath = "C:\Program Files\MyApp\MyApp.exe"
+$LogPath = "C:\logs\myapp-restart.log"
+
+# タイムスタンプを取得
+$Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+# ログを記録
+$LogMessage = "[$Timestamp] アプリがクラッシュしました。再起動します..."
+Add-Content -Path $LogPath -Value $LogMessage
+Write-Host $LogMessage
+
+# 通知を送信（メール、Slack、Discord）
+Send-EmailAlert -Subject "MyApp クラッシュ通知" -Message $LogMessage
+Send-SlackAlert -Message $LogMessage
+
+# アプリを再起動
+Start-Process -FilePath $AppPath
+Write-Host "[$Timestamp] $AppName を再起動しました。"
+```
+
+---
+
+## **3. 通知機能を追加**
+### **📌 (1) メール通知（MailKit を利用）**
+PowerShell で **SMTP 経由でメールを送信** する。
+
+```powershell
+function Send-EmailAlert {
+    param (
+        [string]$Subject,
+        [string]$Message
+    )
+
+    $SMTPServer = "smtp.example.com"
+    $SMTPPort = "587"
+    $Username = "your_email@example.com"
+    $Password = "your_smtp_password"
+    $From = "alert@example.com"
+    $To = "admin@example.com"
+
+    $SMTPClient = New-Object Net.Mail.SmtpClient($SMTPServer, $SMTPPort)
+    $SMTPClient.EnableSsl = $true
+    $SMTPClient.Credentials = New-Object Net.NetworkCredential($Username, $Password)
+
+    $MailMessage = New-Object Net.Mail.MailMessage
+    $MailMessage.From = $From
+    $MailMessage.To.Add($To)
+    $MailMessage.Subject = $Subject
+    $MailMessage.Body = $Message
+
+    $SMTPClient.Send($MailMessage)
+    Write-Host "メール通知を送信しました。"
+}
+```
+✅ **アプリクラッシュ時にメールで通知を送信！**
+
+---
+
+### **📌 (2) Slack / Discord 通知**
+Slack の Webhook URL を利用して通知を送信。
+
+```powershell
+function Send-SlackAlert {
+    param (
+        [string]$Message
+    )
+
+    $WebhookURL = "https://hooks.slack.com/services/your/webhook/url"
+    $Payload = @{
+        text = $Message
+    } | ConvertTo-Json -Compress
+
+    Invoke-RestMethod -Uri $WebhookURL -Method Post -Body $Payload -ContentType "application/json"
+    Write-Host "Slack 通知を送信しました。"
+}
+```
+✅ **Slack や Discord にリアルタイム通知を送信可能！**
+
+---
+
+## **4. タスクスケジューラで PowerShell スクリプトを実行**
+Windows タスクスケジューラで **クラッシュを検知し、`restart-app.ps1` を実行する設定を追加** します。
+
+### **📌 設定手順**
+1. **タスクスケジューラを開く**
+   - `Win + R` → `taskschd.msc` を実行
+   - `タスクの作成` をクリック
+
+2. **「全般」タブ**
+   - 名前: `Monitor MyApp Crash`
+   - `最上位の特権で実行する`（管理者権限）
+
+3. **「トリガー」タブ**
+   - `新規` → `タスクの開始: ログにイベントが記録されたとき`
+   - `ログ:` **`Application`**
+   - `ソース:` **`Application Error`, `Windows Error Reporting`**
+   - `イベント ID:` **`1000, 1001, 1002`**
+
+4. **「操作」タブ**
+   - `新規` → `プログラムの開始`
+   - `プログラム/スクリプト` → **`powershell`**
+   - `引数の追加` → **`-File "C:\scripts\restart-app.ps1"`**
+
+---
+
+## **5. これで実現できること**
+| タスク | 方法 |
+|--------|------|
+| **クラッシュ検知** | Windows イベント ID **1000, 1001, 1002** を監視 |
+| **アプリ再起動** | `restart-app.ps1` で **クラッシュ時に再起動** |
+| **通知送信** | **メール & Slack & Discord** でリアルタイム通知 |
+| **ログ記録** | `C:\logs\myapp-restart.log` に再起動履歴を保存 |
+
+✅ **これで OS 側からプッシュでクラッシュを検知し、再起動と通知が可能に！** 🚀
