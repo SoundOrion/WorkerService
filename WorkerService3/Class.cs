@@ -373,3 +373,11 @@ class Program
 ✅ **SMTP 設定を `appsettings.json` から取得すると、より柔軟に管理できる**  
 
 💡 **MailKit を使った `EmailAlertService` を実装すれば、.NET の推奨する方法で安定したメール通知が可能になります！** 🚀
+
+
+機能	理由	方法
+✅ ログ記録	問題発生時に原因を追跡	ILogger を利用
+✅ アラート通知	サーバーダウン時に管理者へ通知	IAlertService を実装（Email/Slack）
+✅ メモリ & CPU 監視	メモリリークやCPU過負荷を検出	System.Diagnostics を使用
+✅ 自動リスタート	アプリのクラッシュ対策	Windows タスクスケジューラ or PowerShell
+✅ 動的設定更新	設定変更を反映しやすくする	IOptions<T> を使う
