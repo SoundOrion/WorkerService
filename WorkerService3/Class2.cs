@@ -1,4 +1,7 @@
-﻿C# の `ILogger` を使用して適切なログメッセージを書くためのベストプラクティスを紹介します。
+﻿using Microsoft.Extensions.Logging;
+using System;
+
+C# の `ILogger` を使用して適切なログメッセージを書くためのベストプラクティスを紹介します。
 
 -- -
 
