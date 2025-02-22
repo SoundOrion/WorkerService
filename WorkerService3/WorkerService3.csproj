@@ -7,6 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Class.md" />
+    <Compile Include="Class1.md" />
+    <Compile Include="Class2.md" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.1" />
     <PackageReference Include="Microsoft.Garnet" Version="1.0.55" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.24" />
