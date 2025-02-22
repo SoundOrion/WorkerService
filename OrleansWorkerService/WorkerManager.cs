@@ -21,13 +21,7 @@ public class WorkerManager : BackgroundService
         _logger.LogInformation("WorkerManager is starting.");
 
         var workerGrain = _client.GetGrain<IWorkerGrain>("Worker1");
-        await workerGrain.StartWork();
-
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            _logger.LogInformation("WorkerManager is monitoring WorkerGrain.");
-            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
-        }
+        await workerGrain.StartWork(stoppingToken);
 
         _logger.LogInformation("WorkerManager is stopping.");
     }
