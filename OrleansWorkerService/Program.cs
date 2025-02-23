@@ -29,6 +29,8 @@ class Program
                     {
                         options.Port = 8080;
                         options.HostSelf = true;
+                        //options.Host = "*";        // すべてのIPアドレスからのアクセスを許可, ✅ 「http://<サーバーのIP>:8080」でアクセス可能！
+                        //options.Host = "192.168.1.100";  // このサーバーのIPアドレスを指定, ✅ 「http://192.168.1.100:8080」で Orleans Dashboard にアクセス可能！
                     });
                 }
             })
