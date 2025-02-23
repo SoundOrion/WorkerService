@@ -48,4 +48,28 @@ public class WorkerGrain : Grain, IWorkerGrain
         _logger.LogInformation("WorkerGrain is running.");
         return Task.CompletedTask;
     }
+
+    private int _failureCount = 0;
+    private async Task ExceptionWork() // ✅ Func<Task> の形式に修正
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(10));
+
+            _logger.LogInformation("WorkerGrain is running.");
+
+            throw new InvalidOperationException("Something went wrong!");
+        }
+        catch (Exception ex)
+        {
+            _failureCount++;
+            _logger.LogError(ex, $"WorkerGrain encountered an error. Failure count: {_failureCount}");
+
+            if (_failureCount >= 3)
+            {
+                _logger.LogError("Too many failures, shutting down Grain.");
+                DeactivateOnIdle(); // Orleans にこの Grain を削除させる
+            }
+        }
+    }
 }

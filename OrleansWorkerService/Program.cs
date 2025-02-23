@@ -13,7 +13,7 @@ class Program
     {
         var host = Host.CreateDefaultBuilder(args)
             .ConfigureLogging(logging => logging.AddConsole()) // ここで設定
-            .UseOrleans(siloBuilder =>
+            .UseOrleans((context, siloBuilder) =>
             {
                 siloBuilder.UseLocalhostClustering();
                 siloBuilder.AddMemoryGrainStorage("urls");
@@ -22,6 +22,15 @@ class Program
                     options.ClusterId = "dev";
                     options.ServiceId = "WorkerServiceApp";
                 });
+                // ✅ 環境が Development のときだけ Orleans Dashboard を有効化
+                if (context.HostingEnvironment.IsDevelopment())
+                {
+                    siloBuilder.UseDashboard(options =>
+                    {
+                        options.Port = 8080;
+                        options.HostSelf = true;
+                    });
+                }
             })
             .ConfigureServices((context, services) =>
             {
