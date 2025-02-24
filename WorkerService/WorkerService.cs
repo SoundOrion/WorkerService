@@ -24,6 +24,8 @@ public class WorkerService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            //throw new InvalidOperationException();
+
             // フラグを監視し、オンの時だけ動作
             if (_settings.CurrentValue.EnableWorker)
             {

@@ -23,8 +23,8 @@ class Program
                     options.ServiceId = "WorkerServiceApp";
                 });
                 // ✅ 環境が Development のときだけ Orleans Dashboard を有効化
-                if (context.HostingEnvironment.IsDevelopment())
-                {
+                //if (context.HostingEnvironment.IsDevelopment())
+                //{
                     siloBuilder.UseDashboard(options =>
                     {
                         options.Port = 8080;
@@ -32,7 +32,7 @@ class Program
                         //options.Host = "*";        // すべてのIPアドレスからのアクセスを許可, ✅ 「http://<サーバーのIP>:8080」でアクセス可能！
                         //options.Host = "192.168.1.100";  // このサーバーのIPアドレスを指定, ✅ 「http://192.168.1.100:8080」で Orleans Dashboard にアクセス可能！
                     });
-                }
+                //}
             })
             .ConfigureServices((context, services) =>
             {

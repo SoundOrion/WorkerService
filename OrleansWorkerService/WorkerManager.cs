@@ -1,18 +1,26 @@
-using Microsoft.Extensions.Hosting;
+ï»¿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orleans;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Orleans;
+using Orleans.Runtime;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
 public class WorkerManager : BackgroundService
 {
-    private readonly IClusterClient _client;
+    private readonly IGrainFactory _grainFactory;
     private readonly ILogger<WorkerManager> _logger;
 
-    public WorkerManager(IClusterClient client, ILogger<WorkerManager> logger)
+    public WorkerManager(IGrainFactory grainFactory, ILogger<WorkerManager> logger)
     {
-        _client = client;
+        _grainFactory = grainFactory;
         _logger = logger;
     }
 
@@ -20,24 +28,37 @@ public class WorkerManager : BackgroundService
     {
         _logger.LogInformation("WorkerManager is starting.");
 
-        // Orleans ‚Ì WorkerGrain ‚ğæ“¾
-        var workerGrain = _client.GetGrain<IWorkerGrain>("Worker1");
+        // Orleans ã® WorkerGrain ã‚’å–å¾—
+        var workerGrain = _grainFactory.GetGrain<IWorkerGrain>("Worker1");
 
         _logger.LogInformation("Starting WorkerGrain...");
-        await workerGrain.StartWork(); // Orleans ‚ªŠÇ—‚·‚é‚½‚ß 1 ‰ñ‚¾‚¯ŒÄ‚×‚ÎOK
+        await workerGrain.StartWork();
 
         _logger.LogInformation("WorkerManager has started WorkerGrain.");
 
-        // ŠO•”‚©‚ç‚Ì’â~—v‹‚ğƒ`ƒFƒbƒN‚µ‚È‚ª‚çˆ—
         while (!stoppingToken.IsCancellationRequested)
         {
-            //_logger.LogInformation("WorkerManager is running. Monitoring WorkerGrain...");
+            // âœ… `IManagementGrain` ã‹ã‚‰ Orleans ã®ãƒ¡ãƒˆãƒªã‚¯ã‚¹ã‚’å–å¾—
+            var managementGrain = _grainFactory.GetGrain<IManagementGrain>(0);
 
-            // Orleans‚ÌGrain‚Í©“®ŠÇ—‚³‚ê‚é‚½‚ßA’Ç‰Á‚Ìˆ—‚È‚µ
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            // **â‘  ã‚¢ã‚¯ãƒ†ã‚£ãƒ–ãª Grain ã®çµ±è¨ˆæƒ…å ±ã‚’å–å¾—**
+            var grainStats = await managementGrain.GetSimpleGrainStatistics();
+            foreach (var stat in grainStats)
+            {
+                _logger.LogInformation($"ğŸ“Š GrainType: {stat.GrainType}, ActivationCount: {stat.ActivationCount}");
+            }
+
+            // **â‘¡ Silo ã®çŠ¶æ…‹ã‚’å–å¾—ï¼ˆOrleans 7 ã§ã¯ `GetRuntimeStatistics()` ã¯å‰Šé™¤ã•ã‚Œã¦ã„ã‚‹ãŸã‚ `GetHosts()` ã‚’åˆ©ç”¨ï¼‰**
+            var hosts = await managementGrain.GetHosts();
+            foreach (var host in hosts)
+            {
+                _logger.LogInformation($"ğŸ  Silo: {host.Key}, Status: {host.Value}");
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
         }
 
         _logger.LogInformation("WorkerManager is stopping.");
     }
-
 }
+
