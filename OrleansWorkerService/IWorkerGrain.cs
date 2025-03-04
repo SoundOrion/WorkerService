@@ -25,7 +25,14 @@ public class WorkerGrain : Grain, IWorkerGrain
         _logger.LogInformation("WorkerGrain activated.");
 
         // ✅ 正しい形式で RegisterGrainTimer を呼び出す
-        _timer = this.RegisterGrainTimer(DoWork, TimeSpan.Zero, TimeSpan.FromSeconds(3));
+        var options = new GrainTimerCreationOptions
+        {
+            DueTime = TimeSpan.Zero,
+            Period = TimeSpan.FromSeconds(5),
+            KeepAlive = true  // Grain を非アクティブ化させない
+        };
+
+        _timer = this.RegisterGrainTimer(DoWork, options);
 
         return base.OnActivateAsync(cancellationToken);
     }
@@ -39,13 +46,13 @@ public class WorkerGrain : Grain, IWorkerGrain
 
     public Task StartWork()
     {
-        _logger.LogInformation("WorkerGrain StartWork() called.");
+        //_logger.LogInformation("WorkerGrain StartWork() called.");
         return Task.CompletedTask;
     }
 
     private Task DoWork() // ✅ Func<Task> の形式に修正
     {
-        _logger.LogInformation("WorkerGrain is running.");
+        _logger.LogInformation($"WorkerGrain is running. {DateTime.Now}");
         return Task.CompletedTask;
     }
 
