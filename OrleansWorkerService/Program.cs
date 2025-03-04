@@ -17,6 +17,7 @@ class Program
             {
                 siloBuilder.UseLocalhostClustering();
                 siloBuilder.AddMemoryGrainStorage("urls");
+                siloBuilder.UseInMemoryReminderService();
                 siloBuilder.Configure<ClusterOptions>(options =>
                 {
                     options.ClusterId = "dev";
@@ -36,7 +37,8 @@ class Program
             })
             .ConfigureServices((context, services) =>
             {
-                services.AddHostedService<WorkerManager>();
+                services.AddHostedService<PingWorker>();
+                //services.AddHostedService<WorkerManager>();
             })
             .Build();
 
