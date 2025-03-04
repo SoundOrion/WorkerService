@@ -29,6 +29,7 @@ public class WorkerGrain : Grain, IWorkerGrain
         {
             DueTime = TimeSpan.Zero,
             Period = TimeSpan.FromSeconds(5),
+            Interleave = false,    // 他のメソッドと並行実行
             KeepAlive = true  // Grain を非アクティブ化させない
         };
 
