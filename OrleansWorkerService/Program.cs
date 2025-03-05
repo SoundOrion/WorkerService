@@ -16,7 +16,7 @@ class Program
             .UseOrleans((context, siloBuilder) =>
             {
                 siloBuilder.UseLocalhostClustering();
-                siloBuilder.AddMemoryGrainStorage("urls");
+                siloBuilder.AddMemoryGrainStorage("Default");
                 siloBuilder.UseInMemoryReminderService();
                 siloBuilder.Configure<ClusterOptions>(options =>
                 {
@@ -37,7 +37,8 @@ class Program
             })
             .ConfigureServices((context, services) =>
             {
-                services.AddHostedService<PingWorker>();
+                services.AddHostedService<HeartbeatWorker>();
+                //services.AddHostedService<PingWorker>();
                 //services.AddHostedService<WorkerManager>();
             })
             .Build();

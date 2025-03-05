@@ -60,14 +60,14 @@ namespace HeartbeatSystem
                     Period = TimeSpan.FromSeconds(5)  // 5秒ごとに実行
                 });
 
-            // Reminder の登録（1分ごとに発火、Grain が非アクティブでもリマインダーがアクティブ化）
+            // Reminder の登録（10分ごとに発火、Grain が非アクティブでもリマインダーがアクティブ化）
             if (_reminder == null)
             {
                 _reminder = await _reminderRegistry.RegisterOrUpdateReminder(
                 GrainContext.GrainId,
                 ReminderName,
                 dueTime: TimeSpan.Zero,  // すぐに発火
-                period: TimeSpan.FromMinutes(1));  // 1分ごとに発火（バックアップ用）
+                period: TimeSpan.FromMinutes(10));  // 10分ごとに発火（バックアップ用）
             }
         }
 
