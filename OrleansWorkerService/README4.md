@@ -182,3 +182,152 @@ class Program
 
 ## **💡 これで Orleans の `Grain` を常駐プロセスのように使える！**
 👉 **Orleans の `GrainTimer` + `Reminder` + `BackgroundService` を組み合わせることで、クラッシュに強い無限ループを実現できる！** 🚀
+
+
+
+
+
+
+
+
+
+## **常に落ちないことが重要な場合、どの設計が最適か？**
+**→ Orleans の `Reminder` をメインにして、`GrainTimer` は使わないのがベスト！** 🚀  
+**理由:** Orleans の `Reminder` は **クラスタのノード（Silo）がクラッシュしても復旧可能で、処理が途切れないため**。
+
+---
+
+## **🔍 どの方法が適しているか？**
+| 設計 | Orleans クラスタ再起動時 | Silo（ノード）クラッシュ時 | Grain が非アクティブ化されたとき | 負荷 |
+|------|------------------|-------------------|---------------------|------|
+| **GrainTimer (`KeepAlive = true`)** | ❌ 消える | ❌ 消える | ✅ 維持される | ✅ 軽い |
+| **Reminder + GrainTimer（ハイブリッド）** | ✅ 復元される | ✅ Reminder により復旧 | ✅ Reminder により再アクティブ化 | ⚠ 若干負荷増 |
+| **Reminder のみ（推奨）** | ✅ 復元される | ✅ Reminder により復旧 | ✅ Reminder により再アクティブ化 | ✅ 軽い |
+
+💡 **「常に落ちない」ことを最重要視するなら、`Reminder` をメインにすべき！**  
+💡 `GrainTimer` は **Silo がクラッシュすると消える** ので、安定性が必要なら `Reminder` のみの設計がよい。
+
+---
+
+## **✅ Orleans の `Reminder` のみを使った実装**
+### **📌 1. `IHeartbeatGrain` インターフェース**
+```csharp
+using Orleans;
+using Orleans.Runtime;
+using System.Threading.Tasks;
+
+namespace HeartbeatSystem
+{
+    public interface IHeartbeatGrain : IGrainWithStringKey, IRemindable
+    {
+        Task StartHeartbeat();
+        Task ReceiveHeartbeat();
+    }
+}
+```
+✔ **`IRemindable` を継承することで `ReceiveReminder()` を実装可能にする**
+
+---
+
+### **📌 2. `HeartbeatGrain`（Reminder のみ）**
+```csharp
+using Microsoft.Extensions.Logging;
+using Orleans;
+using Orleans.Runtime;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace HeartbeatSystem
+{
+    public class HeartbeatGrain : Grain, IHeartbeatGrain, IRemindable
+    {
+        private readonly ILogger<HeartbeatGrain> _logger;
+        private readonly IReminderRegistry _reminderRegistry;
+        private IGrainReminder? _reminder;
+        private const string ReminderName = "HeartbeatReminder";
+
+        public HeartbeatGrain(IReminderRegistry reminderRegistry, ILogger<HeartbeatGrain> logger)
+        {
+            _reminderRegistry = reminderRegistry;
+            _logger = logger;
+        }
+
+        /// <summary>
+        /// Grain がアクティブ化されたときに Reminder を登録
+        /// </summary>
+        public override async Task OnActivateAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("HeartbeatGrain activated.");
+
+            _reminder = await _reminderRegistry.RegisterOrUpdateReminder(
+                GrainContext.GrainId,
+                ReminderName,
+                dueTime: TimeSpan.Zero,  // すぐに発火
+                period: TimeSpan.FromMinutes(1));  // 1分ごとに発火
+
+            await base.OnActivateAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// Orleans の Reminder によって定期的に呼ばれる
+        /// </summary>
+        public async Task ReceiveReminder(string reminderName, TickStatus status)
+        {
+            if (reminderName == ReminderName)
+            {
+                _logger.LogInformation($"Heartbeat Reminder triggered at {DateTime.UtcNow}");
+
+                await ReceiveHeartbeat();
+            }
+        }
+
+        /// <summary>
+        /// ハートビート処理
+        /// </summary>
+        public async Task ReceiveHeartbeat()
+        {
+            _logger.LogInformation($"[Heartbeat] Sent at {DateTime.UtcNow}");
+
+            // ここで監視対象のシステムにハートビート送信処理を追加
+            // 例: APIコール, DB更新 など
+
+            await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Grain の非アクティブ化時に Reminder を維持
+        /// </summary>
+        public override async ValueTask DisposeAsync()
+        {
+            _logger.LogInformation("Disposing HeartbeatGrain.");
+
+            if (_reminder is not null)
+            {
+                await _reminderRegistry.UnregisterReminder(GrainContext.GrainId, _reminder);
+                _reminder = null;
+            }
+        }
+    }
+}
+```
+
+---
+
+## **💡 Orleans の Reminder のみを使う理由**
+1. **Orleans クラスタが再起動しても、Reminder により Grain が再アクティブ化される**
+2. **GrainTimer を使わないため、Orleans のリソース消費が少なくなる**
+3. **Reminder は Orleans の分散ストレージに保存されるため、Silo（ノード）がクラッシュしても動作する**
+4. **非アクティブになっても、Reminder によって再アクティブ化される**
+5. **長期間安定して動作させる用途に最適（ハートビートやバッチ処理向け）**
+
+---
+
+## **🎯 まとめ**
+| 方法 | Orleans クラスタ再起動時 | Silo（ノード）クラッシュ時 | 負荷 | 推奨用途 |
+|------|------------------|-------------------|------|---------|
+| **GrainTimer (`KeepAlive = true`)** | ❌ 消える | ❌ 消える | ✅ 軽い | 短期間のリアルタイム処理 |
+| **Reminder + GrainTimer（ハイブリッド）** | ✅ 復元される | ✅ Reminder により復旧 | ⚠ 若干負荷増 | 両方のメリットを活かしたい場合 |
+| **Reminder のみ（推奨）** | ✅ 復元される | ✅ Reminder により復旧 | ✅ 軽い | **長期間の安定稼働** |
+
+**☑ `Reminder` のみを使うことで、Silo のクラッシュや Orleans クラスタの再起動にも耐えられる！** 🚀
