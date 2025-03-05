@@ -32,6 +32,6 @@ public class HeartbeatWorker : BackgroundService
         //    await Task.Delay(TimeSpan.FromMinutes(30), stoppingToken); // 30分ごとに Ping() を呼ぶ
         //}
 
-        _logger.LogInformation("HeartbeatWorker stopping.");
+        //_logger.LogInformation("HeartbeatWorker stopping.");
     }
 }

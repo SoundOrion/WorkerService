@@ -15,7 +15,7 @@ namespace HeartbeatSystem
         Task ReceiveReminder(string reminderName, TickStatus status);
     }
 
-    public class HeartbeatGrain : Grain, IHeartbeatGrain, IDisposable
+    public class HeartbeatGrain : Grain, IHeartbeatGrain, IDisposable, IRemindable
     {
         private readonly ILogger<HeartbeatGrain> _logger;
         private readonly ITimerRegistry _timerRegistry;
@@ -56,7 +56,7 @@ namespace HeartbeatSystem
                 state: this,
                 options: new GrainTimerCreationOptions
                 {
-                    DueTime = TimeSpan.Zero,    // すぐに開始
+                    DueTime = TimeSpan.FromSeconds(5) ,    // すぐに開始
                     Period = TimeSpan.FromSeconds(5)  // 5秒ごとに実行
                 });
 
@@ -67,7 +67,7 @@ namespace HeartbeatSystem
                 GrainContext.GrainId,
                 ReminderName,
                 dueTime: TimeSpan.Zero,  // すぐに発火
-                period: TimeSpan.FromMinutes(10));  // 10分ごとに発火（バックアップ用）
+                period: TimeSpan.FromMinutes(1));  // 1分ごとに発火（バックアップ用）
             }
         }
 
@@ -76,7 +76,7 @@ namespace HeartbeatSystem
         /// </summary>
         public async Task ReceiveHeartbeat()
         {
-            _logger.LogInformation($"[Heartbeat] Sent at {DateTime.UtcNow}");
+            _logger.LogInformation($"[Heartbeat] Sent at {DateTime.Now}");
 
             // ここで監視対象のシステムにハートビート送信処理を追加
             // 例: APIコール, DB更新 など
