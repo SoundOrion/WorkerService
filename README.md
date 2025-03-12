@@ -1213,3 +1213,185 @@ app.Run();
 ---
 
 ✅ **この方法なら、アプリ停止時に `Channel<T>` の中に値が残っていても、安全に処理を終えることができる！** 🚀
+
+
+## **💡 `CancellationToken` を考慮しつつ、キューに残っているデータを最後まで処理して安全に終了する方法**
+  
+### **🔷 目標**
+1. **キャンセルが発生したら、新しいデータの追加はしない**
+2. **すでに `Channel<T>` に入っているデータは、最後まで処理してから終了する**
+3. **適切に `Channel.Writer.Complete()` を呼び、すべての `BackgroundService` が安全に終了するようにする**
+
+---
+
+## **🔥 解決策**
+### **✅ `Channel.Writer.Complete()` を呼び、`ReadAllAsync()` で最後まで処理する**
+  
+通常、`ReadAllAsync()` は **`Complete()` が呼ばれると、キューに残っているデータをすべて処理し終えた後に終了** します。  
+これを利用することで、**新規追加を防ぎつつ、既存のデータは最後まで処理できる** ようになります。
+
+---
+
+## **✅ 修正後のコード**
+### **1️⃣ `ChannelManager` を更新**
+`Channel<T>` を管理し、**アプリ停止時に `Writer.Complete()` を呼び出す**。
+
+```csharp
+public class ChannelManager : IDisposable
+{
+    public Channel<string> DbReadChannel { get; }
+    public Channel<string> DbWriteChannel { get; }
+
+    public ChannelManager()
+    {
+        DbReadChannel = Channel.CreateUnbounded<string>();
+        DbWriteChannel = Channel.CreateUnbounded<string>();
+    }
+
+    public void CompleteChannels()
+    {
+        DbReadChannel.Writer.Complete();  // 追加を禁止し、残りのデータを処理して終了
+        DbWriteChannel.Writer.Complete();
+    }
+
+    public void Dispose()
+    {
+        CompleteChannels();
+    }
+}
+```
+✅ **`CompleteChannels()` を呼ぶことで、新規データの追加を防ぎつつ、`ReadAllAsync()` で最後まで処理させる**
+
+---
+
+### **2️⃣ `DbPollingService`（新規データ追加をキャンセル時に停止）**
+```csharp
+public class DbPollingService : BackgroundService
+{
+    private readonly Channel<string> _outputChannel;
+
+    public DbPollingService(ChannelManager channelManager)
+    {
+        _outputChannel = channelManager.DbReadChannel;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var data = await FetchDataFromDbAsync();
+            if (data != null)
+            {
+                await _outputChannel.Writer.WriteAsync(data, stoppingToken);
+            }
+            await Task.Delay(1000, stoppingToken);
+        }
+
+        // 停止時は、新しいデータの追加を行わない
+        _outputChannel.Writer.Complete();
+    }
+}
+```
+✅ **`stoppingToken` をチェックし、キャンセル後は `Writer.Complete()` を呼ぶ**  
+✅ **これにより、新しいデータの追加を禁止しつつ、残りのデータを安全に処理できる**
+
+---
+
+### **3️⃣ `DataProcessingService`（キューにあるデータをすべて処理してから終了）**
+```csharp
+public class DataProcessingService : BackgroundService
+{
+    private readonly Channel<string> _inputChannel;
+    private readonly Channel<string> _outputChannel;
+
+    public DataProcessingService(ChannelManager channelManager)
+    {
+        _inputChannel = channelManager.DbReadChannel;
+        _outputChannel = channelManager.DbWriteChannel;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await foreach (var data in _inputChannel.Reader.ReadAllAsync(stoppingToken))
+        {
+            var processedData = ProcessData(data);
+            await _outputChannel.Writer.WriteAsync(processedData, stoppingToken);
+        }
+
+        // キャンセル時、新規追加を防ぐ
+        _outputChannel.Writer.Complete();
+    }
+}
+```
+✅ **`ReadAllAsync()` は `Complete()` を呼ぶことで、残りのデータをすべて処理した後に終了する**
+✅ **データ処理が終わったら、次の `Channel` にも `Complete()` を伝播する**
+
+---
+
+### **4️⃣ `DbWritingService`（最後のデータを書き込み後に終了）**
+```csharp
+public class DbWritingService : BackgroundService
+{
+    private readonly Channel<string> _inputChannel;
+
+    public DbWritingService(ChannelManager channelManager)
+    {
+        _inputChannel = channelManager.DbWriteChannel;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await foreach (var processedData in _inputChannel.Reader.ReadAllAsync(stoppingToken))
+        {
+            await SaveToDbAsync(processedData);
+        }
+    }
+}
+```
+✅ **キューにあるデータをすべて書き込んでから正常終了できる**
+
+---
+
+### **5️⃣ `Program.cs` で `Dispose()` を適切に呼び出す**
+アプリ停止時に **`Channel.Writer.Complete()` を呼び、すべての処理を最後まで実行する**。
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddSingleton<ChannelManager>();
+builder.Services.AddHostedService<DbPollingService>();
+builder.Services.AddHostedService<DataProcessingService>();
+builder.Services.AddHostedService<DbWritingService>();
+
+var app = builder.Build();
+
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+var channelManager = app.Services.GetRequiredService<ChannelManager>();
+
+lifetime.ApplicationStopping.Register(() =>
+{
+    channelManager.CompleteChannels(); // すべての `Channel<T>` を安全にクローズ
+});
+
+app.Run();
+```
+✅ **アプリ終了時に `Complete()` を呼び、すべてのデータを処理した後にサービスを終了**
+
+---
+
+## **🚀 まとめ**
+| 目的 | 解決策 |
+|------|------|
+| **キャンセル後に新規データを追加しない** | `stoppingToken` をチェックし、`Writer.Complete()` を呼ぶ |
+| **キューにあるデータはすべて処理する** | `ReadAllAsync()` を利用し、`Complete()` 後もデータを処理 |
+| **アプリ終了時に適切に `Channel<T>` をクローズ** | `IHostApplicationLifetime.ApplicationStopping` で `Complete()` を呼ぶ |
+| **全サービスが安全に終了する** | `ReadAllAsync()` を利用し、処理後にサービスが終了する |
+
+---
+
+## **🔥 これで、キャンセル時にデータがキューに残っていても安全に処理し終えて終了できる！**
+- **新しいデータは追加しないが、すでにキューにあるデータは最後まで処理する**
+- **すべての `BackgroundService` が適切に停止する**
+- **スレッドや `Channel<T>` のリソースリークを防げる**
+
+✅ **これが `Channel<T>` を `Singleton` で使う際のベストプラクティス！** 🚀
