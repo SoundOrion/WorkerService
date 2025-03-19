@@ -422,3 +422,163 @@ content.Headers.ContentEncoding.Add("gzip");
 - **`Dictionary` でグループ化して `streams` にまとめるのがベストプラクティス**
 
 これで **Loki へのログ転送の柔軟性と効率を最大化** できます！🔥
+
+
+Loki へのログ転送時に `gzip` 圧縮を実装するには、**`HttpClient` の `GZipStream` を使ってリクエストボディを圧縮** します。
+
+---
+
+## **1. `gzip` 圧縮を使った Loki への Bulk ログ送信**
+以下のコードでは、`GZipStream` を使って JSON データを圧縮し、`HttpClient` を通じて Loki に送信します。
+
+### **C# コード（GZip 圧縮対応）**
+```csharp
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+
+class Program
+{
+    private static readonly HttpClient client = new HttpClient();
+    private static readonly string lokiUrl = "http://localhost:3100/loki/api/v1/push";
+
+    static async Task Main()
+    {
+        var logs = new List<(DateTimeOffset Timestamp, string Level, string Message)>
+        {
+            (DateTimeOffset.UtcNow, "info", "Info log message 1"),
+            (DateTimeOffset.UtcNow.AddMilliseconds(10), "info", "Info log message 2"),
+            (DateTimeOffset.UtcNow.AddMilliseconds(20), "error", "Error log message 1"),
+            (DateTimeOffset.UtcNow.AddMilliseconds(30), "error", "Error log message 2")
+        };
+
+        await SendLogsToLoki(logs);
+    }
+
+    static async Task SendLogsToLoki(List<(DateTimeOffset Timestamp, string Level, string Message)> logEntries)
+    {
+        // ログレベルごとにグループ化
+        var groupedLogs = new Dictionary<string, List<string[]>>();
+
+        foreach (var log in logEntries)
+        {
+            string timestamp = log.Timestamp.ToUnixTimeNanoseconds().ToString();
+
+            if (!groupedLogs.ContainsKey(log.Level))
+                groupedLogs[log.Level] = new List<string[]>();
+
+            groupedLogs[log.Level].Add(new string[] { timestamp, log.Message });
+        }
+
+        // Loki 形式に変換
+        var streams = new List<object>();
+
+        foreach (var kvp in groupedLogs)
+        {
+            streams.Add(new
+            {
+                stream = new { job = "csharp-app", level = kvp.Key },
+                values = kvp.Value
+            });
+        }
+
+        var payload = new { streams };
+
+        // JSON を作成
+        string json = JsonSerializer.Serialize(payload);
+
+        // GZip 圧縮
+        byte[] compressedData = CompressStringToGZip(json);
+
+        // GZip 圧縮されたデータを送信
+        var content = new ByteArrayContent(compressedData);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        content.Headers.ContentEncoding.Add("gzip"); // GZip ヘッダーを追加
+
+        var response = await client.PostAsync(lokiUrl, content);
+        Console.WriteLine($"Response: {response.StatusCode}");
+    }
+
+    // GZip 圧縮処理
+    static byte[] CompressStringToGZip(string input)
+    {
+        using var outputStream = new MemoryStream();
+        using (var gzipStream = new GZipStream(outputStream, CompressionLevel.Optimal, true))
+        using (var writer = new StreamWriter(gzipStream, Encoding.UTF8))
+        {
+            writer.Write(input);
+        }
+        return outputStream.ToArray();
+    }
+}
+```
+
+---
+
+## **2. コードのポイント**
+✅ **`gzip` 圧縮を適用**:
+   - `GZipStream` を使って JSON データを圧縮
+   - `CompressStringToGZip` メソッドで文字列を圧縮
+   ```csharp
+   byte[] compressedData = CompressStringToGZip(json);
+   ```
+
+✅ **圧縮データを `HttpClient` で送信**:
+   - `ByteArrayContent` を使って `gzip` 圧縮データを送る
+   - **`Content-Encoding: gzip` を明示**
+   ```csharp
+   content.Headers.ContentEncoding.Add("gzip");
+   ```
+
+✅ **Loki の `streams` を活用**:
+   - **ログレベルごとに `stream` をグループ化**
+   - 1 回のリクエストで複数のログを一括送信
+
+---
+
+## **3. 期待する効果**
+| 方法 | データサイズ | 転送時間 |
+|------|------------|---------|
+| **非圧縮** (`application/json`) | 大きい | 遅い |
+| **GZip 圧縮 (`application/json + gzip`)** | 小さい | 速い |
+
+**GZip 圧縮により、データサイズを 70% 以上削減** できる場合もあり、**ネットワーク負荷を軽減** できます。
+
+---
+
+## **4. さらに最適化するには？**
+### **(1) 送信バッチサイズを調整**
+- **バッファリング (`ConcurrentQueue`) を活用**
+- **一定数 or 一定時間ごとに送信**
+```csharp
+private static readonly int BatchSize = 10;
+```
+
+### **(2) 非同期 `HttpClient` を再利用**
+- `HttpClient` を **使いまわす** ことで、接続のオーバーヘッドを削減
+
+```csharp
+private static readonly HttpClient client = new HttpClient(new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.GZip });
+```
+
+### **(3) Loki のバッファ設定を調整**
+- Loki 側で `ingester` の **バッファ設定を最適化**
+  ```yaml
+  chunk_idle_period: 10m
+  max_chunk_age: 10m
+  ```
+
+---
+
+## **5. まとめ**
+✅ **Loki に `gzip` 圧縮データを送信する方法を実装**  
+✅ **`Content-Encoding: gzip` を設定し、転送データ量を削減**  
+✅ **Loki の `streams` を活用し、ログレベルごとにグループ化**  
+✅ **バッチ処理や `ConcurrentQueue` を組み合わせてさらに最適化可能**
+
+この方法で **Loki への転送効率を最大化** できます！🚀
